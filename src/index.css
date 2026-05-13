@@ -2,9 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+:root { color-scheme: dark; }
 body {
   margin: 0;
-  padding: 0;
-  background: #09090b;
-  font-family: Inter, sans-serif;
+  font-family: Inter, system-ui, sans-serif;
+  background: radial-gradient(circle at top, #1f2937 0%, #09090b 50%);
+}
+
+.premium-card {
+  background: linear-gradient(160deg, rgba(24,24,27,0.95), rgba(9,9,11,0.95));
+  border: 1px solid rgba(113,113,122,0.28);
+  border-radius: 1.5rem;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+  backdrop-filter: blur(8px);
+}
+
+.animate-card {
+  animation: floatIn .5s ease both;
+}
+
+.field {
+  @apply w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-lime-400;
+}
+
+.btn {
+  @apply rounded-xl bg-lime-400 text-black px-4 py-2 text-sm font-semibold;
+}
+
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
