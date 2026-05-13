@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-const STORAGE_KEY = 'discipline-os-data-v2';
-const TODAY = new Date().toISOString().slice(0, 10);
+const STORAGE_KEY = 'discipline-os-data-v3';
+
+const getTodayKey = () => new Date().toISOString().slice(0, 10);
 
 const DEFAULT_STATE = {
   habits: [
-    { id: 'wake', name: 'Wake Up On Time', xp: 20, completed: false },
-    { id: 'focus', name: '90 Minutes Deep Work', xp: 35, completed: false },
-    { id: 'workout', name: 'Workout Session', xp: 30, completed: false },
+    { id: 'wake', name: 'Wake Up On Time', xp: 20, completed: false, completedDate: '' },
+    { id: 'focus', name: '90 Minutes Deep Work', xp: 35, completed: false, completedDate: '' },
+    { id: 'workout', name: 'Workout Session', xp: 30, completed: false, completedDate: '' },
   ],
+  totalXP: 0,
   streak: 3,
   streakHistory: [1, 2, 2, 3, 3, 4, 3],
   lastCompletedDate: '',
@@ -21,17 +23,37 @@ const DEFAULT_STATE = {
     Saturday: false,
     Sunday: false,
   },
-  events: [
-    { id: '1', title: 'Morning routine', date: TODAY, time: '05:45' },
-    { id: '2', title: 'Deep work sprint', date: TODAY, time: '08:00' },
-  ],
+  events: [],
 };
 
+function normalizeHabitsForToday(habits, todayKey) {
+  return habits.map((habit) => ({
+    ...habit,
+    completed: habit.completedDate === todayKey,
+    completedDate: habit.completedDate ?? '',
+  }));
+}
+
 function loadSavedData() {
+  const todayKey = getTodayKey();
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
-    return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    if (!raw) {
+      return {
+        ...DEFAULT_STATE,
+        events: [
+          { id: '1', title: 'Morning routine', date: todayKey, time: '05:45' },
+          { id: '2', title: 'Deep work sprint', date: todayKey, time: '08:00' },
+        ],
+      };
+    }
+
+    const parsed = { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    return {
+      ...parsed,
+      habits: normalizeHabitsForToday(parsed.habits, todayKey),
+    };
   } catch {
     return DEFAULT_STATE;
   }
@@ -39,45 +61,72 @@ function loadSavedData() {
 
 export default function DisciplineOS() {
   const saved = loadSavedData();
+  const [todayKey, setTodayKey] = useState(getTodayKey());
   const [habits, setHabits] = useState(saved.habits);
+  const [totalXP, setTotalXP] = useState(saved.totalXP ?? 0);
   const [streak, setStreak] = useState(saved.streak);
   const [streakHistory, setStreakHistory] = useState(saved.streakHistory);
   const [lastCompletedDate, setLastCompletedDate] = useState(saved.lastCompletedDate);
   const [workoutLog, setWorkoutLog] = useState(saved.workoutLog);
   const [events, setEvents] = useState(saved.events);
   const [newHabit, setNewHabit] = useState('');
-  const [eventDraft, setEventDraft] = useState({ title: '', date: TODAY, time: '09:00' });
+  const [eventDraft, setEventDraft] = useState({ title: '', date: todayKey, time: '09:00' });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nextDayKey = getTodayKey();
+      setTodayKey((prev) => {
+        if (prev !== nextDayKey) {
+          setHabits((currentHabits) => normalizeHabitsForToday(currentHabits, nextDayKey));
+          setEventDraft((prevDraft) => ({ ...prevDraft, date: nextDayKey }));
+        }
+        return nextDayKey;
+      });
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ habits, streak, streakHistory, lastCompletedDate, workoutLog, events })
+      JSON.stringify({ habits, totalXP, streak, streakHistory, lastCompletedDate, workoutLog, events })
     );
-  }, [habits, streak, streakHistory, lastCompletedDate, workoutLog, events]);
+  }, [habits, totalXP, streak, streakHistory, lastCompletedDate, workoutLog, events]);
 
   const completedXP = useMemo(() => habits.filter((h) => h.completed).reduce((a, h) => a + h.xp, 0), [habits]);
   const completedCount = habits.filter((h) => h.completed).length;
-  const progress = Math.min((completedXP / 120) * 100, 100);
-  const level = Math.floor(completedXP / 100) + 1;
+  const level = Math.floor(totalXP / 100) + 1;
+  const progress = (totalXP % 100);
   const weeklyWorkouts = Object.values(workoutLog).filter(Boolean).length;
 
   const sortedEvents = [...events].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 
-  function toggleHabit(id) {
-    setHabits((prev) => prev.map((habit) => (habit.id === id ? { ...habit, completed: !habit.completed } : habit)));
+  function completeHabit(id) {
+    setHabits((prev) => {
+      const habit = prev.find((h) => h.id === id);
+      if (!habit || habit.completedDate === todayKey) return prev;
+
+      setTotalXP((value) => value + habit.xp);
+      return prev.map((item) =>
+        item.id === id
+          ? { ...item, completed: true, completedDate: todayKey }
+          : item
+      );
+    });
   }
 
   function addHabit() {
     if (!newHabit.trim()) return;
-    setHabits((prev) => [...prev, { id: Date.now().toString(), name: newHabit.trim(), xp: 20, completed: false }]);
+    setHabits((prev) => [...prev, { id: Date.now().toString(), name: newHabit.trim(), xp: 20, completed: false, completedDate: '' }]);
     setNewHabit('');
   }
 
   function completeDay() {
-    if (lastCompletedDate === TODAY) return;
+    if (lastCompletedDate === todayKey) return;
     const nextStreak = streak + 1;
     setStreak(nextStreak);
-    setLastCompletedDate(TODAY);
+    setLastCompletedDate(todayKey);
     setStreakHistory((prev) => [...prev.slice(-6), nextStreak]);
   }
 
@@ -88,7 +137,7 @@ export default function DisciplineOS() {
   function addEvent() {
     if (!eventDraft.title.trim()) return;
     setEvents((prev) => [...prev, { ...eventDraft, id: Date.now().toString() }]);
-    setEventDraft({ title: '', date: TODAY, time: '09:00' });
+    setEventDraft({ title: '', date: todayKey, time: '09:00' });
   }
 
   return (
@@ -103,8 +152,8 @@ export default function DisciplineOS() {
             <div className="rounded-2xl bg-lime-400 text-black px-4 py-2 font-bold text-xl self-start">Lv {level}</div>
           </div>
           <div className="mt-5">
-            <div className="flex justify-between text-sm mb-2"><span>Daily XP</span><span>{completedXP}/120</span></div>
-            <div className="h-3 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-lime-300 to-emerald-500 transition-all" style={{ width: `${progress}%` }} /></div>
+            <div className="flex justify-between text-sm mb-2"><span>Total XP</span><span>{totalXP}</span></div>
+            <div className="h-3 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-lime-300 to-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} /></div>
           </div>
         </header>
 
@@ -138,10 +187,10 @@ export default function DisciplineOS() {
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
           <article className="premium-card animate-card p-4 sm:p-5">
-            <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Habits</h2><span className="text-zinc-400 text-sm">{completedCount} done</span></div>
+            <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Habits</h2><span className="text-zinc-400 text-sm">{completedCount} done · {completedXP} daily XP</span></div>
             <div className="space-y-2 mt-4">
               {habits.map((habit) => (
-                <button key={habit.id} onClick={() => toggleHabit(habit.id)} className={`w-full rounded-2xl p-3 border flex items-center justify-between ${habit.completed ? 'border-emerald-400 bg-emerald-500/10' : 'border-zinc-700 bg-zinc-900/70'}`}>
+                <button key={habit.id} onClick={() => completeHabit(habit.id)} className={`habit-btn w-full rounded-2xl p-3 border flex items-center justify-between ${habit.completed ? 'habit-complete' : 'border-zinc-700 bg-zinc-900/70'}`}>
                   <span>{habit.name}</span><span className="text-xs text-zinc-400">+{habit.xp} XP</span>
                 </button>
               ))}
