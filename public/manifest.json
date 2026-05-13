@@ -1,0 +1,8 @@
+{
+  "name": "Discipline OS Pro",
+  "short_name": "DisciplineOS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#84cc16"
+}
